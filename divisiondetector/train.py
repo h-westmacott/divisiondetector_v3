@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from divisiondetector.datamodules import DivisionDataModule
 from divisiondetector.trainingmodules import DivisionDetectorTrainer
-from divisiondetector.utils import SaveModelOnValidation
+from divisiondetector.utils.utils import SaveModelOnValidation
 # from divisiondetector.evaluation import DivisionPerformanceValidation
 
 import pytorch_lightning as pl

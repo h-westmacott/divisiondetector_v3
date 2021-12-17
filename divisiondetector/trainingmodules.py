@@ -9,7 +9,7 @@ from torchvision.datasets.mnist import MNIST
 from torchvision import transforms
 
 from divisiondetector.models import Unet4D
-from divisiondetector.utils import BuildFromArgparse
+from divisiondetector.utils.utils import BuildFromArgparse
 
 class DivisionDetectorTrainer(pl.LightningModule, BuildFromArgparse):
     def __init__(self,
