@@ -1,16 +1,21 @@
-import pytorch_lightning as pl
+import os
+import json
 import argparse
+import pytorch_lightning as pl
 from torch.utils.data import DataLoader
+from torch.utils.data.dataset import ConcatDataset
 from divisiondetector.datasets import DivisionDataset
 
 class DivisionDataModule(pl.LightningDataModule):
 
     def __init__(self,
+                 config_path,
                  window_size,
                  batch_size,
                  loader_workers=10):
         super().__init__()
 
+        self.config = json.loads(config_path) # Dictionary
         self.window_size = tuple(window_size)
         self.batch_size = batch_size
         self.loader_workers = loader_workers
@@ -21,31 +26,23 @@ class DivisionDataModule(pl.LightningDataModule):
         mode = 'ball'
         ball_radius = (10, 10, 10)
 
-        # TODO: create different train validataion and test datasets
-        self.ds_train = DivisionDataset(
-            "16-10-13-EGG_manual_annotations_t10_t103-t107_t186-t190-vertices.csv",
-            "volumes.zarr",
-            window_size,
-            time_window,
-            mode,
-            ball_radius
-        )
-        self.ds_val = DivisionDataset(
-            "16-10-13-EGG_manual_annotations_t10_t103-t107_t186-t190-vertices.csv",
-            "volumes.zarr",
-            window_size,
-            time_window,
-            mode,
-            ball_radius
-        )
-        self.ds_test = DivisionDataset(
-            "16-10-13-EGG_manual_annotations_t10_t103-t107_t186-t190-vertices.csv",
-            "volumes.zarr",
-            window_size,
-            time_window,
-            mode,
-            ball_radius
-        )
+        def create_dataset(path_list):
+            datasets = []
+            for paths in path_list:
+                datasets.append(DivisionDataset(
+                    paths['data'],
+                    paths['volume'],
+                    paths['labels'],
+                    window_size,
+                    time_window,
+                    mode,
+                    ball_radius
+                ))
+            return ConcatDataset(datasets)
+
+        self.ds_train = create_dataset(self.config['train'])
+        self.ds_val = create_dataset(self.config['validation'])
+        self.ds_test = create_dataset(self.config['test'])
 
     def train_dataloader(self):
         return DataLoader(self.ds_train,
@@ -79,4 +76,5 @@ class DivisionDataModule(pl.LightningDataModule):
             pass
         parser.add_argument('--loader_workers', type=int, default=8)
         parser.add_argument('--window_size', nargs=3, type=int, default=500) # (z, y, x)
+        parser.add_argument('--config_path', type=str)
         return parser
