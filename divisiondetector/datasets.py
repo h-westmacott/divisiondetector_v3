@@ -24,6 +24,8 @@ class DivisionDataset(Dataset):
         return when querying.
 
         mode: Mode of the point rasterisation. Can be either 'ball' or 'peak'
+
+        ball_radius: Radius of rasterised ball.
         '''
 
         def __getlabels(label_path, div_path=None):
