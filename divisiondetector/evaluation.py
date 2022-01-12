@@ -1,3 +1,4 @@
+import os
 from pytorch_lightning.callbacks import Callback
 
 class DivisionPerformanceValidation(Callback):

@@ -1,8 +1,9 @@
 import os
 import logging
+import chardet
 import pandas as pd
 from torch.utils.data import Dataset
-from utils.gp_pipeline import GPPipeline
+from .utils.gp_pipeline import GPPipeline
 
 logger = logging.getLogger()
 
@@ -28,62 +29,19 @@ class DivisionDataset(Dataset):
         ball_radius: Radius of rasterised ball.
         '''
 
-        def __getlabels(label_path, div_path=None):
-            '''
-            Load and process label data
-            '''
-            raw_df = pd.read_csv(label_path, encoding='unicode_escape')
+        def __getCSV(label_path):
+            if os.path.isfile(label_path):
+                with open(label_path, 'rb') as f:
+                    result = chardet.detect(f.read(10000))
+                df = pd.read_csv(label_path, sep='\, ', header=None, encoding=result['encoding'], engine='python')
+                df.columns = ["Timepoint", "Z", "Y", "X", "ID"]
+                df = df.reset_index()
 
-            logger.info("Data loaded.")
+                logger.info("File exists. Data loaded.")
 
-            # Converting and formatting
-            columns = ["Timepoint", "X", "Y", "Z"]
-
-            try:
-                raw_df = raw_df.drop(["Label", "Detection quality"], axis=1, errors='ignore') # Dropping unnecessary columns
-                raw_df["ID"] = raw_df["ID"].astype(int) # Ensure the IDs are integers
-            except:
-                # In case of NaNs
-                raw_df = raw_df.loc[2:].drop(["Label", "Detection quality"], axis=1, errors='ignore') # Dropping unnecessary columns
-                raw_df["ID"] = raw_df["ID"].astype(int) # Ensure the IDs are integers
-
-            raw_df = raw_df.set_index("ID") # Set index to ID
-
-            # Reordering the columns in preparation for processing. Takes into account all the possible pre-processing done
-            if 'X' in raw_df.columns and 'Timepoint' in raw_df.columns:
-                raw_df = raw_df[columns]
-            elif 'X' in raw_df.columns and 'Spot frame' in raw_df.columns:
-                raw_df = raw_df[['Spot frame', 'X', 'Y', 'Z']]
-            else: # Completely unprocessed
-                raw_df = raw_df[['Spot frame', 'Spot position', 'Spot position.1', 'Spot position.2']]
-
-            df = raw_df.apply(lambda x: pd.Series([int(x[0])] + [float(element) for element in x[1:]], index=columns), axis=1) # Convert coordinates and timepoints to numbers (from strings) and relabel
-
-            logger.info("Data processed.")
-            
-            # Writing the data to a CSV (for convenience) if a path to write to is provided
-            if div_path != None:
-                # Gunpowder wants its CSVs separated with ', ' and not just ','
-                write_df = df.apply(lambda x: pd.Series([str(element) + ',' for element in x], index=columns), axis=1)
-                columns = ["Timepoint", "Z", "Y", "X"] # Reorder columns
-                write_df[columns].assign(id=write_df.index.to_series()).to_csv(div_path, sep=' ', index=False, header=False)
-
-                logger.info("Data written.")
-
-            return df
-
-        def __getCSV(label_path, div_path=None):
-            # If a pre-processed convenience data file is present at specified path, read it
-            if div_path != None:
-                if os.path.isfile(div_path):
-                    df = pd.read_csv(div_path, sep='\, ', header=None, engine='python')
-                    df.columns = ["Timepoint", "Z", "Y", "X", "ID"]
-                    df = df.set_index("ID")
-
-                    logger.info("File exists. Data loaded.")
-
-                    return df
-            return __getlabels(label_path, div_path)
+                return df
+            else:
+                raise FileNotFoundError('File not found at label_path')
 
         logger.info("Initialising...")
 
@@ -111,4 +69,4 @@ class DivisionDataset(Dataset):
             self.time_window
         )
 
-        return c_t_vol, target, points
+        return c_t_vol, target

@@ -1,6 +1,7 @@
 from funlib.learn.torch.models import ConvPass
 from funlib.learn.torch.models.unet import Downsample
 from funlib.learn.torch.models.unet import Upsample
+from funlib.learn.torch.models.unet import UNet
 import math
 import torch
 import torch.nn as nn
@@ -131,7 +132,7 @@ class DivUpsample(Upsample):
         return torch.cat([f_cropped, g_cropped], dim=1)
 
 
-class DivUNet(torch.nn.Module):
+class DivUNet(UNet):
 
     def __init__(
             self,
@@ -149,7 +150,21 @@ class DivUNet(torch.nn.Module):
             constant_upsample=False,
             padding='valid'):
 
-        super().__init__()
+        super().__init__(
+            in_channels,
+            num_fmaps,
+            fmap_inc_factor,
+            downsample_factors,
+            kernel_size_down,
+            kernel_size_up,
+            activation,
+            fov,
+            voxel_size,
+            num_fmaps_out,
+            num_heads,
+            constant_upsample,
+            padding
+        )
 
         self.num_levels = len(downsample_factors) + 1
         self.num_heads = num_heads

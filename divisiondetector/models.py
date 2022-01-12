@@ -28,9 +28,8 @@ class Unet4D(nn.Module):
                              activation='ReLU',
                              padding='valid',
                              num_fmaps_out=self.features_in_last_layer,
-                            # TODO: check if this needs to be changed to (1,1,3,3)
                              kernel_size_down=[[(1, 1, 3, 3), (1,1,1,1), (3, 3, 3, 3)]] * (depth + 1),
-                             kernel_size_up=[[(1, 1, 3, 3), (1, 1, 3, 3)]] * depth, # (1, 1, 3, 3), (1, THIS ONE MISBEHAVES -> 1, 3, 3)
+                             kernel_size_up=[[(1, 1, 3, 3), (1, 1, 3, 3)]] * depth, # (1, 1, 3, 3), (1, This one alters other dimensions -> 1, 3, 3)
                              constant_upsample=True)
 
         self.head = torch.nn.Sequential(Conv4d(self.features_in_last_layer, self.features_in_last_layer, (1, 1, 1, 1)),

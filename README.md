@@ -12,14 +12,14 @@
 ARXIV   
 [![Paper](http://img.shields.io/badge/arxiv-math.co:1480.1111-B31B1B.svg)](https://www.nature.com/articles/nature14539)
 -->
-<!-- ![CI testing](https://github.com/PyTorchLightning/deep-learning-project-template/workflows/CI%20testing/badge.svg?branch=master&event=push) --> -->
+<!-- ![CI testing](https://github.com/PyTorchLightning/deep-learning-project-template/workflows/CI%20testing/badge.svg?branch=master&event=push) -->
 <!--  
 Conference   
 -->   
 </div>
  
 ## Description   
-Division detector for 3D lightsheet videos
+Cell division detector for 3D lightsheet videos. Written with pytorch-lightning and gunpowder in Python.
 
 <!-- ## How to run   
 First, install dependencies   
