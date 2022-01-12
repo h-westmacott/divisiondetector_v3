@@ -1,7 +1,11 @@
 import gunpowder as gp
 from gunpowder.nodes import simple_augment
+from .div_csv_points_source import DivCsvPointsSource
 import math
 import zarr
+import logging
+
+logger = logging.getLogger()
 
 class GPPipeline():
     def __init__(self, vol_path, div_path, mode, ball_radius): # Ball radius (z, y, x)
@@ -15,7 +19,7 @@ class GPPipeline():
                 )}
             ) + gp.Pad(vol_key, None))
 
-            div_source = (gp.CsvPointsSource(
+            div_source = (DivCsvPointsSource(
                 self.div_path,
                 div_key,
                 ndims=4, # (Timepoint, Z, Y, X)
@@ -32,7 +36,7 @@ class GPPipeline():
                 )
             )
 
-            normalise = gp.Normalize(vol_key)
+            normalise = gp.Normalize(vol_key, factor=1/3000)
             simple_augment = gp.SimpleAugment(mirror_only=[1, 2, 3], transpose_only=[1, 2, 3])
 
             pipeline = (
@@ -61,7 +65,7 @@ class GPPipeline():
         # Check rasterisation mode. If invalid, default to 'ball'
         if mode != 'ball' and mode != 'peak':
             mode = 'ball'
-            print("Rasterisation mode not valid. Defaulting to 'ball'.")
+            logger.log("Rasterisation mode not valid. Defaulting to 'ball'.")
 
         self.pipeline = compile_pipeline(
             self.vol_key,
@@ -99,12 +103,16 @@ class GPPipeline():
         )
         
         request[self.divr_key] = label_roi
-
         request[self.div_key] = label_roi
 
         batch = self.pipeline.request_batch(request)
 
-        return batch[self.vol_key].data, batch[self.divr_key].data, batch[self.div_key]
+        # Reducing the dimensions of the balls from real-world to voxels
+        ball_array = batch[self.divr_key].data
+        if self.resolution[1] > 1:
+            ball_array = ball_array[..., self.resolution[1]//2::self.resolution[1], :, :]
+
+        return batch[self.vol_key].data, ball_array, batch[self.div_key]
 
     def clear(self):
         self.pipeline.internal_teardown()
