@@ -1,4 +1,5 @@
 import os
+from shutil import copyfile
 import pandas as pd
 import chardet
 
@@ -33,3 +34,7 @@ val_df.to_csv(os.path.join(dest_folder, 'validation_161013.csv'))
 test_df.to_csv(os.path.join(dest_folder, 'test_160616.csv'))
 train_df_161013.to_csv(os.path.join(dest_folder, 'train_161013.csv'))
 train_df_160616.to_csv(os.path.join(dest_folder, 'train_160616.csv'))
+
+# No need to parse frames, but needs to be processed for gunpowder with everything else
+copyfile(os.path.join(origin_folder, 'positive_divisions_160616.csv'), os.path.join(dest_folder, 'positive_divisions_160616.csv'))
+copyfile(os.path.join(origin_folder, 'positive_divisions_161013.csv'), os.path.join(dest_folder, 'positive_divisions_161013.csv'))
