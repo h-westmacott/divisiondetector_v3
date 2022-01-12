@@ -3,6 +3,7 @@
 from argparse import ArgumentParser
 from divisiondetector.datamodules import DivisionDataModule
 from divisiondetector.trainingmodules import DivisionDetectorTrainer
+from divisiondetector.monitoring import MonitorCallback
 
 import pytorch_lightning as pl
 
@@ -15,12 +16,15 @@ if __name__ == '__main__':
     parser = pl.Trainer.add_argparse_args(parser)
     parser = DivisionDataModule.add_argparse_args(parser)
     parser = DivisionDataModule.add_model_specific_args(parser)
+    parser = MonitorCallback.add_argparse_args(parser)
 
     args = parser.parse_args()
 
     model = DivisionDetectorTrainer.from_argparse_args(args)
     datamodule = DivisionDataModule.from_argparse_args(args)
+    monitor_callback = MonitorCallback.from_argparse_args(args)
 
     #  init trainer
     trainer = pl.Trainer.from_argparse_args(args)
+    trainer.callbacks.append(monitor_callback)
     trainer.fit(model, datamodule)
