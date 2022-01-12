@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Ensures that the divisiondetector file is added to PYTHONPATH as a module for importing
+sys.path.append(os.path.dirname(os.path.abspath(__file__)).rsplit('/', 1)[0])
+
 from argparse import ArgumentParser
 from divisiondetector.datamodules import DivisionDataModule
 from divisiondetector.trainingmodules import DivisionDetectorTrainer
