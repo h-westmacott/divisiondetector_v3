@@ -1,9 +1,10 @@
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from divisiondetector.datasets_v2 import DivisonDatasetV2
+from datasets_v2 import DivisonDatasetV2
 from models import Unet4D
 import torch
 import torch.nn as nn
+from utils import get_logger
 # from utils.div_unet import DivUNet
 # from funlib.learn.torch.models.conv4d import Conv4d
 
@@ -12,7 +13,7 @@ def __crop(tensor): # crop_factor is left/right padding for (z, y, x)
         t, d, h, w = 2, 2, 8 ,8
         return tensor[:, :, t:-t, d:-d, h:-h, w:-w].float()
 
-def train_loop(dataloader, model, loss_fn, optimizer):
+def train_loop(dataloader, model, loss_fn, optimizer, logger):
     size = len(dataloader.dataset)
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
@@ -31,7 +32,9 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         optimizer.step()
         optimizer.zero_grad()
         all_losses.append(float(loss.detach().cpu().numpy()))
-
+        logger.add(key="loss", value=float(loss.detach().cpu().numpy()))
+        logger.write()
+        logger.plot()
         if batch % 100 == 0:
             loss, current = loss.item(), batch * batch_size + len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
@@ -39,8 +42,8 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
 
 learning_rate = 1e-3
-batch_size = 64
-epochs = 10
+batch_size = 4
+epochs = 1
 
 # path_to_divisions = "X:/Exchange/Steffen/DivisionDetector/prediction_setup34_300000_180420_0.3.csv"
 path_to_divisions = r"X:\Guest\nho\data\processed_annotations\positive_divisions_160616.csv"
@@ -59,11 +62,13 @@ loss_fn = nn.BCEWithLogitsLoss()
 # loss_fn = BCEDiceLoss(bce_weight=0.7, dice_weight=0.3)
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
+logger = get_logger(keys=["loss",
+                            ], title="loss")
 
 all_losses = []
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
-    loss = train_loop(train_dataloader, model, loss_fn, optimizer)
+    loss = train_loop(train_dataloader, model, loss_fn, optimizer, logger)
     all_losses+=loss
     # test_loop(test_dataloader, model, loss_fn)
 print("Done!")
