@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .utils.div_unet import DivUNet
+from utils.div_unet import DivUNet
 from funlib.learn.torch.models.conv4d import Conv4d
 
 class Unet4D(nn.Module):
@@ -34,7 +34,11 @@ class Unet4D(nn.Module):
 
         self.head = torch.nn.Sequential(Conv4d(self.features_in_last_layer, self.features_in_last_layer, (1, 1, 1, 1)),
                                         nn.ReLU(),
-                                        Conv4d(self.features_in_last_layer, out_channels, (1, 1, 1, 1)))
+                                        Conv4d(self.features_in_last_layer, self.features_in_last_layer, (1, 1, 1, 1)),
+                                        nn.ReLU(),
+                                        Conv4d(self.features_in_last_layer, out_channels, (1, 1, 1, 1)),
+                                        # nn.ReLU(),
+                                        )
 
     def forward(self, raw):
         h = self.backbone(raw)
