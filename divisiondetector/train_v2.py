@@ -8,6 +8,7 @@ import torch.nn as nn
 from utils import get_logger
 from utils.losses import BCEDiceLoss
 import numpy as np
+import zarr
 # from utils.div_unet import DivUNet
 # from funlib.learn.torch.models.conv4d import Conv4d
 
@@ -16,7 +17,7 @@ def __crop(tensor): # crop_factor is left/right padding for (z, y, x)
         t, d, h, w = 2, 2, 8 ,8
         return tensor[:, :, t:-t, d:-d, h:-h, w:-w].float()
 
-def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size):
+def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size, save_snapshot_every=100):
     size = len(dataloader.dataset)
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
@@ -39,6 +40,14 @@ def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size
         if batch % 100 == 0:
             loss, current = loss.item(), batch * batch_size + len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        if batch % save_snapshot_every == 0:
+            save_snapshot(
+                X,
+                pred,
+                batch,
+                path = "/cephfs/henryjw/division_detector_data/results/"
+            )
+
     return all_losses
 
 def save_model(state, iteration, is_lowest=False):
@@ -52,6 +61,39 @@ def save_model(state, iteration, is_lowest=False):
     file_name = os.path.join("models", str(iteration).zfill(6) + ".pth")
     torch.save(state, file_name)
     print(f"Checkpoint saved at iteration {iteration}")
+
+def save_snapshot(batch, prediction, iteration, path = ''):
+    raw = batch
+    # raw = raw[0,:]
+    num_spatial_dims = len(raw.shape) - 2
+
+    axis_names = ["s", "c"] + ["t", "z", "y", "x"][-num_spatial_dims:]
+    prediction_offset = tuple(
+        (a - b) / 2
+        for a, b in zip(
+            raw.shape[-num_spatial_dims:], prediction.shape[-num_spatial_dims:]
+        )
+    )
+    f = zarr.open(path+'/'+"snapshots.zarr", "a")
+    f[f"{iteration}/raw"] = raw.detach().cpu().numpy()
+    f[f"{iteration}/raw"].attrs["axis_names"] = axis_names
+    f[f"{iteration}/raw"].attrs["resolution"] = [
+        1,
+    ] * num_spatial_dims
+
+    # normalize the offsets by subtracting the mean offset per image
+    prediction_cpu = prediction.detach().cpu().numpy()
+    # prediction_cpu_reshaped = np.reshape(
+    #     prediction_cpu, (prediction_cpu.shape[0], prediction_cpu.shape[1], -1)
+    # )
+    # mean_prediction = np.mean(prediction_cpu_reshaped, 2)
+    # prediction_cpu -= mean_prediction[(...,) + (np.newaxis,) * (num_spatial_dims+1)]
+    f[f"{iteration}/prediction"] = prediction_cpu
+    f[f"{iteration}/prediction"].attrs["axis_names"] = axis_names
+    f[f"{iteration}/prediction"].attrs["offset"] = prediction_offset
+    f[f"{iteration}/prediction"].attrs["resolution"] = [
+        1,
+    ] * num_spatial_dims
 
 def train(trainconfig):
     learning_rate = trainconfig["learning_rate"]
