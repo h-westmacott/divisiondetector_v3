@@ -44,6 +44,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size
             save_snapshot(
                 X,
                 pred,
+                __crop(y),
                 batch,
                 path = "/cephfs/henryjw/division_detector_data/results/"
             )
@@ -62,7 +63,7 @@ def save_model(state, iteration, is_lowest=False):
     torch.save(state, file_name)
     print(f"Checkpoint saved at iteration {iteration}")
 
-def save_snapshot(batch, prediction, iteration, path = ''):
+def save_snapshot(batch, prediction, target, iteration, path = ''):
     raw = batch
     # raw = raw[0,:]
     num_spatial_dims = len(raw.shape) - 2
@@ -94,6 +95,12 @@ def save_snapshot(batch, prediction, iteration, path = ''):
     f[f"{iteration}/prediction"].attrs["resolution"] = [
         1,
     ] * num_spatial_dims
+    f[f"{iteration}/target"] = target.detach().cpu().numpy()
+    f[f"{iteration}/target"].attrs["axis_names"] = axis_names
+    f[f"{iteration}/target"].attrs["offset"] = prediction_offset
+    f[f"{iteration}/target"].attrs["resolution"] = [
+        1,
+    ] * num_spatial_dims
 
 def train(trainconfig):
     learning_rate = trainconfig["learning_rate"]
@@ -117,8 +124,9 @@ def train(trainconfig):
     model = model.to(device)
 
     # loss_fn = nn.BCEWithLogitsLoss()
-    loss_fn = BCEDiceLoss(bce_weight=0.1, dice_weight=0.9)
+    loss_fn = BCEDiceLoss(bce_weight=0.5, dice_weight=0.5)
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
     logger = get_logger(keys=["loss",
                                 ], title="loss")
@@ -127,7 +135,7 @@ def train(trainconfig):
     all_losses = []
     start_iteration = 0
 
-    checkpoint = 'models/best_loss.pth'
+    checkpoint = trainconfig["checkpoint"]
 
     if checkpoint == '':
         pass
@@ -143,6 +151,7 @@ def train(trainconfig):
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
         loss = train_loop(train_dataloader, model, loss_fn, optimizer, logger, device, batch_size)
+        scheduler.step()
         all_losses+=loss
         # test_loop(test_dataloader, model, loss_fn)
         is_lowest = np.mean(loss) < lowest_loss
