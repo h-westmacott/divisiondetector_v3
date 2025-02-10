@@ -6,7 +6,7 @@ from models import Unet4D
 import torch
 import torch.nn as nn
 from utils import get_logger
-from utils.losses import BCEDiceLoss
+from utils.losses import BCEDiceLoss, CEDiceLoss
 import numpy as np
 import zarr
 # from utils.div_unet import DivUNet
@@ -17,7 +17,7 @@ def __crop(tensor): # crop_factor is left/right padding for (z, y, x)
         t, d, h, w = 2, 2, 8 ,8
         return tensor[:, :, t:-t, d:-d, h:-h, w:-w].float()
 
-def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size, save_snapshot_every=100):
+def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size, save_snapshot_every=100, experiment_name =''):
     size = len(dataloader.dataset)
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
@@ -46,24 +46,37 @@ def train_loop(dataloader, model, loss_fn, optimizer, logger, device, batch_size
                 pred,
                 __crop(y),
                 batch,
-                path = "/cephfs/henryjw/division_detector_data/results/"
+                path = "/cephfs/henryjw/division_detector_data/results/",
+                experiment_name = experiment_name
             )
 
     return all_losses
 
-def save_model(state, iteration, is_lowest=False):
-    if not os.path.exists("models"):
-        os.makedirs("models")
+def save_model(state, iteration, is_lowest=False, experiment_name = ''):
+    if experiment_name != '':
+        model_path = os.path.join(experiment_name,"models")
+        print('setting model path',experiment_name)
+    else: 
+        model_path = "models"
+
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
     if is_lowest:
-        file_name = os.path.join("models", "best_loss.pth")
+        file_name = os.path.join(model_path, "best_loss.pth")
         torch.save(state, file_name)
         print(f"Best model weights saved at iteration {iteration}")
     
-    file_name = os.path.join("models", str(iteration).zfill(6) + ".pth")
+    file_name = os.path.join(model_path, str(iteration).zfill(6) + ".pth")
     torch.save(state, file_name)
     print(f"Checkpoint saved at iteration {iteration}")
 
-def save_snapshot(batch, prediction, target, iteration, path = ''):
+def save_snapshot(batch, prediction, target, iteration, path = '', experiment_name = ''):
+    if experiment_name != '':
+        snapshot_path = os.path.join(experiment_name,"snapshots.zarr")
+        print('setting snapshot path',experiment_name)
+    else:
+        snapshot_path = "snapshots.zarr"
+
     raw = batch
     # raw = raw[0,:]
     num_spatial_dims = len(raw.shape) - 2
@@ -75,7 +88,7 @@ def save_snapshot(batch, prediction, target, iteration, path = ''):
             raw.shape[-num_spatial_dims:], prediction.shape[-num_spatial_dims:]
         )
     )
-    f = zarr.open(path+'/'+"snapshots.zarr", "a")
+    f = zarr.open(path+'/'+snapshot_path, "a")
     f[f"{iteration}/raw"] = raw.detach().cpu().numpy()
     f[f"{iteration}/raw"].attrs["axis_names"] = axis_names
     f[f"{iteration}/raw"].attrs["resolution"] = [
@@ -103,9 +116,14 @@ def save_snapshot(batch, prediction, target, iteration, path = ''):
     ] * num_spatial_dims
 
 def train(trainconfig):
+    experiment_name = trainconfig["experiment_name"]
     learning_rate = trainconfig["learning_rate"]
     batch_size = trainconfig["batch_size"]
     epochs = trainconfig["epochs"]
+
+    if experiment_name != '':
+        if not os.path.exists(experiment_name):
+            os.makedirs(experiment_name)
 
     # path_to_divisions = "X:/Exchange/Steffen/DivisionDetector/prediction_setup34_300000_180420_0.3.csv"
     path_to_divisions = trainconfig["path_to_divisions"]
@@ -121,15 +139,16 @@ def train(trainconfig):
     model = Unet4D(in_channels=1,out_channels=1)
     model.train()
     model= nn.DataParallel(model)
+    # device = torch.device('cuda:1')
     model = model.to(device)
 
     # loss_fn = nn.BCEWithLogitsLoss()
     loss_fn = BCEDiceLoss(bce_weight=0.5, dice_weight=0.5)
+    # loss_fn = CEDiceLoss(ce_weight=1.0, dice_weight=0.0)
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.7)
     logger = get_logger(keys=["loss",
-                                ], title="loss")
+                                ], title=os.path.join(experiment_name,"loss"))
 
     lowest_loss = 1e6
     all_losses = []
@@ -150,8 +169,10 @@ def train(trainconfig):
 
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        loss = train_loop(train_dataloader, model, loss_fn, optimizer, logger, device, batch_size)
+        loss = train_loop(train_dataloader, model, loss_fn, optimizer, logger, device, batch_size, experiment_name = experiment_name)
+        print(scheduler.get_lr())
         scheduler.step()
+        print(scheduler.get_lr())
         all_losses+=loss
         # test_loop(test_dataloader, model, loss_fn)
         is_lowest = np.mean(loss) < lowest_loss
@@ -164,5 +185,5 @@ def train(trainconfig):
                 "optim_state_dict": optimizer.state_dict(),
                 "logger_data": logger.data,
             }
-        save_model(state, iteration, is_lowest)
+        save_model(state, iteration, is_lowest, experiment_name)
     print("Done!")
