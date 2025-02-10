@@ -29,10 +29,11 @@ class DivisonDatasetV2(Dataset):
                              "T" : self.zarr_dataset.shape[1]}
                                                           
         self.offset_augment = True
+        self.normalization_factor = 1/512
         self.__setup_pipeline()
 
     def __len__(self):
-        return len(self.divisions_pd)*5
+        return len(self.divisions_pd)*25
 
     def __getitem__(self, idx):
         # img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
@@ -46,7 +47,7 @@ class DivisonDatasetV2(Dataset):
         
         
         # if idx<len(self.divisions_pd):
-        if random.random()>0.25:
+        if random.random()>0.4:
             # True division
             idx = idx%len(self.divisions_pd)
             this_detection = self.divisions_pd.astype('int64').iloc[idx]
@@ -70,33 +71,57 @@ class DivisonDatasetV2(Dataset):
                 this_detection["Z"] = this_detection["Z"] + offset_z
                 this_detection["Y"] = this_detection["Y"] + offset_y
                 this_detection["X"] = this_detection["X"] + offset_x
-        else:
-            this_detection = {"Z" : random.randint(0,((self.dataset_size["Z"])-1)-(self.window_size['Z'])),
-                                "Y" : random.randint(0,(self.dataset_size["Y"]-1)-(self.window_size['Y'])),
-                                "X" : random.randint(0,(self.dataset_size["X"]-1)-(self.window_size['X'])),
-                                "T" : random.randint(0,(self.dataset_size["T"]-1)-(self.time_window_size))}
 
-            # vol = self.pipeline.fetch(
-            # (this_detection["Z"], this_detection["Y"], this_detection["X"],this_detection['T']),
-            # (self.window_size,self.time_window_size)
-            # )
-            true_division = False
-        
-        request = gp.BatchRequest()
-        request[self.raw] = gp.ArraySpec(
-            roi=gp.Roi(
-                (0,
-                 min((self.dataset_size["T"]-1)-(self.time_window_size),max(0, this_detection["T"]-(self.time_window_size//2))),
-                 min(((self.dataset_size["Z"])-1)-(self.window_size['Z']),max(0, this_detection["Z"]-(self.window_size['Z']//2))),
-                 min((self.dataset_size["Y"]-1)-(self.window_size['Y']),max(0, this_detection["Y"]-(self.window_size['Y']//2))),
-                 min((self.dataset_size["X"]-1)-(self.window_size['X']),max(0, this_detection["X"]-(self.window_size['X']//2))),),
-                # (1, self.num_channels, *self.crop_size),
-                (self.num_channels, self.time_window_size, self.window_size['Z'],self.window_size['Y'],self.window_size['X']),
+            request = gp.BatchRequest()
+            request[self.raw] = gp.ArraySpec(
+                roi=gp.Roi(
+                    (0,
+                    min((self.dataset_size["T"]-1)-(self.time_window_size),max(0, this_detection["T"]-(self.time_window_size//2))),
+                    min(((self.dataset_size["Z"])-1)-(self.window_size['Z']),max(0, this_detection["Z"]-(self.window_size['Z']//2))),
+                    min((self.dataset_size["Y"]-1)-(self.window_size['Y']),max(0, this_detection["Y"]-(self.window_size['Y']//2))),
+                    min((self.dataset_size["X"]-1)-(self.window_size['X']),max(0, this_detection["X"]-(self.window_size['X']//2))),),
+                    # (1, self.num_channels, *self.crop_size),
+                    (self.num_channels, self.time_window_size, self.window_size['Z'],self.window_size['Y'],self.window_size['X']),
+                )
             )
-        )
-        with gp.build(self.pipeline):
-            vol = self.pipeline.request_batch(request)
-        
+            with gp.build(self.pipeline):
+                vol = self.pipeline.request_batch(request)
+            raw = vol[self.raw].data
+        else:
+            raw_max = 0.0
+            while raw_max == 0.0:
+                this_detection = {"Z" : random.randint(0,((self.dataset_size["Z"])-1)-(self.window_size['Z'])),
+                                    "Y" : random.randint(0,(self.dataset_size["Y"]-1)-(self.window_size['Y'])),
+                                    "X" : random.randint(0,(self.dataset_size["X"]-1)-(self.window_size['X'])),
+                                    "T" : random.randint(0,(self.dataset_size["T"]-1)-(self.time_window_size))}
+
+                # vol = self.pipeline.fetch(
+                # (this_detection["Z"], this_detection["Y"], this_detection["X"],this_detection['T']),
+                # (self.window_size,self.time_window_size)
+                # )
+                true_division = False
+            
+                request = gp.BatchRequest()
+                request[self.raw] = gp.ArraySpec(
+                    roi=gp.Roi(
+                        (0,
+                        min((self.dataset_size["T"]-1)-(self.time_window_size),max(0, this_detection["T"]-(self.time_window_size//2))),
+                        min(((self.dataset_size["Z"])-1)-(self.window_size['Z']),max(0, this_detection["Z"]-(self.window_size['Z']//2))),
+                        min((self.dataset_size["Y"]-1)-(self.window_size['Y']),max(0, this_detection["Y"]-(self.window_size['Y']//2))),
+                        min((self.dataset_size["X"]-1)-(self.window_size['X']),max(0, this_detection["X"]-(self.window_size['X']//2))),),
+                        # (1, self.num_channels, *self.crop_size),
+                        (self.num_channels, self.time_window_size, self.window_size['Z'],self.window_size['Y'],self.window_size['X']),
+                    )
+                )
+                with gp.build(self.pipeline):
+                    vol = self.pipeline.request_batch(request)
+                raw = vol[self.raw].data
+                raw_max = raw.max()
+
+                # check if bounding box around this_detection contains any of the points in self.divisions_pd:
+
+            #     print(raw.max())
+            # print('max of raw being taken forward:',raw.max())
         ground_truth = np.zeros_like(vol[self.raw].data)
         if true_division:
             # We do have a real division, with coordinates defined by this_detection.
@@ -132,13 +157,13 @@ class DivisonDatasetV2(Dataset):
 
             ground_truth[0,relative_t+pad_width, relative_z+pad_width, relative_y+pad_width, relative_x+pad_width] = 1
 
-            ground_truth = apply_4d_gaussian_blur(ground_truth, sigma=(0,3,8,8,8))
+            ground_truth = apply_4d_gaussian_blur(ground_truth, sigma=(0,1,8/5,8,8))
 
             ground_truth = ground_truth[:, pad_width:-pad_width, pad_width:-pad_width, pad_width:-pad_width, pad_width:-pad_width]
 
 
         # return vol[self.raw].data, ground_truth, true_division, dict(this_detection)
-        return vol[self.raw].data, ground_truth, true_division
+        return raw, ground_truth, true_division
 
     def __setup_pipeline(self):
         self.raw = gp.ArrayKey("RAW")
@@ -155,7 +180,7 @@ class DivisonDatasetV2(Dataset):
                 {self.raw: 'raw'},
                 array_specs={self.raw: raw_spec},
             )
-            # + gp.Normalize(self.raw, factor=self.normalization_factor)
+            + gp.Normalize(self.raw, factor=self.normalization_factor)
         )
         
 def apply_4d_gaussian_blur(ground_truth, sigma):
