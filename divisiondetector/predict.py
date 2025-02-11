@@ -43,13 +43,13 @@ def predict(predictconfig):
     )
 
     voxel_size = (1,) * predictconfig["num_dims"]
-    raw_spec = gp.ArraySpec(voxel_size=voxel_size, interpolatable=True)
+    raw_spec = gp.ArraySpec(voxel_size=voxel_size[:5], interpolatable=True)
 
     input_size = gp.Coordinate((1,)+input_shape) * gp.Coordinate(voxel_size)
     output_size = gp.Coordinate(output_shape) * gp.Coordinate(voxel_size)
     diff_size = input_size - output_size
     context = (
-            0,
+            # 0,
             0,
             diff_size[2] // 2,
             diff_size[3] // 2,
@@ -73,9 +73,9 @@ def predict(predictconfig):
         ),
     )
     scan_request[prediction] = gp.Roi(
-        (0, 0, 0, 0, 0, 0),
+        (0, 0, 0, 0, 0),
         (
-            1,
+            # 1,
             1,
             output_size[2],
             output_size[3],
@@ -99,7 +99,7 @@ def predict(predictconfig):
     ds = f.create_dataset(
         predictconfig["prediction_dataset_name"],
         shape=(
-            1,
+            # 1,
             1,
             *spatial_array,
         ),
@@ -123,24 +123,27 @@ def predict(predictconfig):
             {raw: predictconfig["raw_dataset_name"]},
             {raw: gp.ArraySpec(voxel_size=voxel_size[:5], interpolatable=True)},
         )
-        + Print("A")
+        # + Print("A")
         + gp.Unsqueeze([raw], axis=0)
-        + Print("B")
+        # + Print("B")
         + gp.Normalize(raw, factor=predictconfig["normalization_factor"])
-        + Print("C")
+        # + Print("C")
 #        + gp.Pad(raw, context, mode="reflect")
         + gp.Pad(raw, context[-5:])
-        + Print("D")
+        # + Print("D")
 #        + gp.Pad(raw, context, mode="reflect")
         + predict
-        + Print("E")
+        # + Print("E")
+        + gp.Squeeze([prediction],axis=0)
+        # + Print("F")
         + gp.ZarrWrite(
             dataset_names={
                 prediction: predictconfig["prediction_dataset_name"]
             },
             output_filename=predictconfig["prediction_container_path"],
+            store=predictconfig["prediction_container_path"]
         )
-        + Print("F")
+        # + Print("G")
         + gp.Scan(scan_request)
     )
 
